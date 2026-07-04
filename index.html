@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="light dark">
 <title>週末の48時間</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#2563EB">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800&family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
@@ -112,19 +117,22 @@
     display: flex; align-items: center; gap: 8px;
     padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg);
   }
-  .bl-title { flex: 1; min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
+  .bl-title { flex: 1; min-width: 0; font-weight: 500; overflow-wrap: anywhere; cursor: pointer; }
+  .bl-title:active { opacity: 0.6; }
   .bl-hrs { font-size: 12px; font-weight: 700; color: var(--muted); flex-shrink: 0; }
 
   .btn {
     font-family: inherit; font-size: 12px; font-weight: 700; padding: 7px 10px;
     border: 1.5px solid var(--line); border-radius: 8px; background: var(--card);
     color: var(--ink); cursor: pointer; flex-shrink: 0; line-height: 1; white-space: nowrap;
+    min-height: 36px;
   }
   .btn:active { background: var(--line); }
   .btn.to-sat { color: var(--sat); border-color: var(--sat); background: var(--sat-soft); }
   .btn.to-sun { color: var(--sun); border-color: var(--sun); background: var(--sun-soft); }
-  .btn.ghost { border-color: transparent; color: var(--muted); padding: 7px 6px; }
+  .btn.ghost { border-color: transparent; color: var(--muted); padding: 7px 8px; min-width: 36px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; }
   .btn.danger { color: var(--over); border-color: color-mix(in srgb, var(--over) 45%, transparent); }
+  .btn.sm { font-size: 11px; padding: 5px 8px; }
 
   .empty-line {
     font-size: 13px; color: var(--muted); text-align: center; padding: 12px 0;
@@ -241,7 +249,10 @@
   <section class="card">
     <div class="card-head">
       <div class="card-title">やりたいこと <span class="en">Backlog</span></div>
-      <span class="num" style="font-size:12px;color:var(--muted);font-weight:700" id="backlogCount"></span>
+      <span style="display:flex;align-items:center;gap:8px">
+        <span class="num" style="font-size:12px;color:var(--muted);font-weight:700" id="backlogCount"></span>
+        <button type="button" class="btn sm danger" id="resetBtn" style="display:none">全消去</button>
+      </span>
     </div>
     <form class="add-row" id="addForm" autocomplete="off">
       <input type="text" id="taskInput" placeholder="思いついたら書き出す" aria-label="やりたいこと">
@@ -283,6 +294,8 @@
       <label><input type="number" id="epHrs" min="0.25" step="0.25" inputmode="decimal"> 時間</label>
       <label class="ep-check"><input type="checkbox" id="epDone"> 完了</label>
       <span class="ep-spacer"></span>
+      <button type="button" class="btn to-sat" id="epToSat" style="display:none">土へ</button>
+      <button type="button" class="btn to-sun" id="epToSun" style="display:none">日へ</button>
       <button type="button" class="btn ghost" id="epBack">リストに戻す</button>
       <button type="button" class="btn danger" id="epDel">削除</button>
       <button type="button" class="btn" id="epClose">閉じる</button>
@@ -331,7 +344,13 @@
   /* ---------- 直近の週末 ---------- */
   const now = new Date();
   const satD = new Date(now);
-  satD.setDate(now.getDate() + ((6 - now.getDay() + 7) % 7));
+  const dow = now.getDay();
+  if (dow === 0) {
+    /* 日曜日 → 昨日の土曜 + 今日の日曜 */
+    satD.setDate(now.getDate() - 1);
+  } else {
+    satD.setDate(now.getDate() + ((6 - dow + 7) % 7));
+  }
   const sunD = new Date(satD); sunD.setDate(satD.getDate() + 1);
   $("#satDate").textContent = `${satD.getMonth()+1}/${satD.getDate()}`;
   $("#sunDate").textContent = `${sunD.getMonth()+1}/${sunD.getDate()}`;
@@ -374,6 +393,7 @@
     listEl.innerHTML = "";
     $("#backlogEmpty").style.display = items.length ? "none" : "block";
     $("#backlogCount").textContent = items.length ? `${items.length}件` : "";
+    $("#resetBtn").style.display = tasks.length ? "" : "none";
 
     items.forEach(t => {
       const li = document.createElement("li");
@@ -382,11 +402,21 @@
       const title = document.createElement("span");
       title.className = "bl-title";
       title.textContent = t.title;
+      title.addEventListener("click", () => {
+        const v = prompt("タスク名を編集", t.title);
+        if (v !== null && v.trim()) { t.title = v.trim(); render(); }
+      });
       li.appendChild(title);
 
       const hrs = document.createElement("span");
       hrs.className = "bl-hrs num";
       hrs.textContent = fmtH(t.hrs);
+      hrs.style.cursor = "pointer";
+      hrs.addEventListener("click", () => {
+        const v = prompt("時間を変更（時間単位）", t.hrs);
+        const n = parseFloat(v);
+        if (!isNaN(n) && n >= 0.25) { t.hrs = n; render(); }
+      });
       li.appendChild(hrs);
 
       li.appendChild(mkBtn("土へ", "btn to-sat", () => place(t, "sat")));
@@ -404,6 +434,10 @@
     t.start = autoPlace(where, t.hrs * 60);
     selectedId = t.id;
     render();
+    /* タイムラインまでスクロール */
+    const col = $(where === "sat" ? "#colSat" : "#colSun");
+    const block = col.querySelector(".block.selected");
+    if (block) block.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   function mkBtn(label, cls, fn) {
@@ -527,6 +561,8 @@
     $("#epStart").value = clock(t.start % 1440);
     $("#epHrs").value = t.hrs;
     $("#epDone").checked = t.done;
+    $("#epToSat").style.display = t.where === "sun" ? "" : "none";
+    $("#epToSun").style.display = t.where === "sat" ? "" : "none";
   }
 
   const selTask = () => tasks.find(x => x.id === selectedId);
@@ -546,6 +582,16 @@
   $("#epDone").addEventListener("change", () => {
     const t = selTask(); if (!t) return;
     t.done = $("#epDone").checked;
+    render();
+  });
+  $("#epToSat").addEventListener("click", () => {
+    const t = selTask(); if (!t) return;
+    t.where = "sat"; t.start = autoPlace("sat", t.hrs * 60);
+    render();
+  });
+  $("#epToSun").addEventListener("click", () => {
+    const t = selTask(); if (!t) return;
+    t.where = "sun"; t.start = autoPlace("sun", t.hrs * 60);
     render();
   });
   $("#epBack").addEventListener("click", () => {
@@ -570,6 +616,12 @@
     tasks.push({ id: idSeq++, title, hrs, where: "backlog", start: 0, done: false });
     input.value = "";
     input.focus();
+    render();
+  });
+
+  $("#resetBtn").addEventListener("click", () => {
+    if (!confirm("すべてのタスクを削除しますか？")) return;
+    tasks = []; idSeq = 1; selectedId = null;
     render();
   });
 
