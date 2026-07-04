@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="light dark">
-<title>週末の48時間</title>
+<title>48h — 週末プランナー</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -100,8 +100,8 @@
     background: var(--bg); color: var(--ink);
   }
   .hrs-in {
-    width: 70px; font-family: "Inter", sans-serif; font-size: 15px; font-weight: 700;
-    text-align: center; padding: 10px 4px; border: 1.5px solid var(--line);
+    font-family: "Noto Sans JP", sans-serif; font-size: 14px; font-weight: 700;
+    text-align: center; padding: 10px 6px; border: 1.5px solid var(--line);
     border-radius: 10px; background: var(--bg); color: var(--ink);
   }
   .add-btn {
@@ -218,12 +218,11 @@
   .ep-title { font-weight: 900; font-size: 15px; margin-bottom: 10px; overflow-wrap: anywhere; }
   .ep-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .ep-row label { font-size: 12px; font-weight: 700; color: var(--muted); display: flex; align-items: center; gap: 5px; }
-  .ep-row input[type="time"], .ep-row input[type="number"] {
-    font-family: "Inter", sans-serif; font-size: 14px; font-weight: 700;
+  .ep-row input[type="time"], .ep-row select {
+    font-family: "Noto Sans JP", sans-serif; font-size: 14px; font-weight: 700;
     padding: 7px 8px; border: 1.5px solid var(--line); border-radius: 8px;
     background: var(--bg); color: var(--ink);
   }
-  .ep-row input[type="number"] { width: 64px; text-align: center; }
   .ep-spacer { flex: 1; }
   .ep-check { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; cursor: pointer; }
   .ep-check input { width: 20px; height: 20px; accent-color: var(--sat); cursor: pointer; }
@@ -234,8 +233,8 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="eyebrow en">Weekend Planner</div>
-    <h1>週末の<span class="num">48</span>時間にプロットする。</h1>
+    <div class="eyebrow en">Weekend 48h Planner</div>
+    <h1><span class="num">48</span>時間を、自分のものにする。</h1>
     <div class="header-sub">
       <span id="totalLine"></span>
       <span class="range-ctl">
@@ -256,12 +255,12 @@
     </div>
     <form class="add-row" id="addForm" autocomplete="off">
       <input type="text" id="taskInput" placeholder="思いついたら書き出す" aria-label="やりたいこと">
-      <input type="number" class="hrs-in" id="hrsInput" min="0.25" step="0.25" value="1" inputmode="decimal" aria-label="かかる時間（時間）">
+      <select class="hrs-in" id="hrsInput" aria-label="かかる時間"></select>
       <button type="submit" class="add-btn">追加</button>
     </form>
-    <div class="hint">単位は「時間」（0.5 = 30分）。「土へ」「日へ」で時間軸の空きに置かれます。置いたあとはドラッグで動かせます。</div>
+    <div class="hint">「土へ」「日へ」で空き時間に自動配置。置いた後はドラッグで移動、タップで編集。</div>
     <ul class="backlog" id="backlogList"></ul>
-    <div class="empty-line" id="backlogEmpty">まずは思いつくままに書き出してみましょう</div>
+    <div class="empty-line" id="backlogEmpty">やりたいことを書き出そう</div>
   </section>
 
   <!-- タイムライン -->
@@ -291,7 +290,7 @@
     <div class="ep-title" id="epTitle"></div>
     <div class="ep-row">
       <label>開始 <input type="time" id="epStart" step="900"></label>
-      <label><input type="number" id="epHrs" min="0.25" step="0.25" inputmode="decimal"> 時間</label>
+      <label><select id="epHrs"></select></label>
       <label class="ep-check"><input type="checkbox" id="epDone"> 完了</label>
       <span class="ep-spacer"></span>
       <button type="button" class="btn to-sat" id="epToSat" style="display:none">土へ</button>
@@ -340,6 +339,27 @@
   const SNAP = 15;            /* スナップ（分） */
 
   const wakeEl = $("#wakeTime"), bedEl = $("#bedTime");
+
+  /* ---------- 時間プルダウン生成 ---------- */
+  function hrsLabel(h) {
+    const m = Math.round(h * 60);
+    if (m < 60) return `${m}分`;
+    const hr = Math.floor(m / 60);
+    const rm = m % 60;
+    return rm ? `${hr}時間${rm}分` : `${hr}時間`;
+  }
+  function fillHrsSelect(sel, selected) {
+    sel.innerHTML = "";
+    for (let h = 0.25; h <= 8; h += 0.25) {
+      const opt = document.createElement("option");
+      opt.value = h;
+      opt.textContent = hrsLabel(h);
+      if (h === selected) opt.selected = true;
+      sel.appendChild(opt);
+    }
+  }
+  fillHrsSelect($("#hrsInput"), 1);
+  fillHrsSelect($("#epHrs"), 1);
 
   /* ---------- 直近の週末 ---------- */
   const now = new Date();
@@ -412,10 +432,20 @@
       hrs.className = "bl-hrs num";
       hrs.textContent = fmtH(t.hrs);
       hrs.style.cursor = "pointer";
-      hrs.addEventListener("click", () => {
-        const v = prompt("時間を変更（時間単位）", t.hrs);
-        const n = parseFloat(v);
-        if (!isNaN(n) && n >= 0.25) { t.hrs = n; render(); }
+      hrs.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const sel = document.createElement("select");
+        sel.className = "hrs-in";
+        sel.style.position = "absolute";
+        sel.style.zIndex = "5";
+        fillHrsSelect(sel, t.hrs);
+        hrs.replaceWith(sel);
+        sel.focus();
+        sel.addEventListener("change", () => {
+          t.hrs = parseFloat(sel.value) || 1;
+          render();
+        });
+        sel.addEventListener("blur", () => render());
       });
       li.appendChild(hrs);
 
@@ -559,7 +589,7 @@
     panel.classList.add("open");
     $("#epTitle").textContent = t.title;
     $("#epStart").value = clock(t.start % 1440);
-    $("#epHrs").value = t.hrs;
+    fillHrsSelect($("#epHrs"), t.hrs);
     $("#epDone").checked = t.done;
     $("#epToSat").style.display = t.where === "sun" ? "" : "none";
     $("#epToSun").style.display = t.where === "sat" ? "" : "none";
@@ -576,7 +606,7 @@
   });
   $("#epHrs").addEventListener("change", () => {
     const t = selTask(); if (!t) return;
-    t.hrs = Math.max(0.25, parseFloat($("#epHrs").value) || 0.25);
+    t.hrs = parseFloat($("#epHrs").value) || 1;
     render();
   });
   $("#epDone").addEventListener("change", () => {
@@ -612,7 +642,7 @@
     const input = $("#taskInput");
     const title = input.value.trim();
     if (!title) { input.focus(); return; }
-    const hrs = Math.max(0.25, parseFloat($("#hrsInput").value) || 0.25);
+    const hrs = parseFloat($("#hrsInput").value) || 1;
     tasks.push({ id: idSeq++, title, hrs, where: "backlog", start: 0, done: false });
     input.value = "";
     input.focus();
